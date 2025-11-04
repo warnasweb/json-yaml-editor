@@ -9,19 +9,25 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.6.0",
+    "inline-style-prefixer": "^6.0.4",
+    "js-yaml": "^4.1.0",
+    "monaco-editor": "^0.49.0",
+    "next": "16.0.1",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "next": "16.0.1"
+    "react-split-pane-next": "^1.0.6"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "babel-plugin-react-compiler": "1.0.0",
-    "typescript": "^5",
+    "eslint": "^9",
+    "eslint-config-next": "16.0.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@tailwindcss/postcss": "^4",
     "tailwindcss": "^4",
-    "eslint": "^9",
-    "eslint-config-next": "16.0.1"
+    "typescript": "^5"
   }
 }

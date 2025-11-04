@@ -1,65 +1,334 @@
-import Image from "next/image";
+"use client";
 
+import { useCallback, useMemo, useState } from "react";
+import SplitPane from "react-split-pane-next";
+import yaml from "js-yaml";
+
+import EditorPane from "@/components/EditorPane";
+import JsonPreview from "@/components/JsonPreview";
+import Toolbar from "@/components/Toolbar";
+
+const INITIAL_YAML = `name: Json-Yaml Editor
+version: 1.0.0
+description: A synchronized editor for JSON and YAML content.
+features:
+  - Two-way editing
+  - Real-time validation
+`;
+
+type DataFormat = "yaml" | "json";
+
+/**
+ * Home page renders the split-pane editor and orchestrates conversions.
+ */
 export default function Home() {
+  const initialJson = useMemo(() => {
+    try {
+      const parsed = yaml.load(INITIAL_YAML) ?? {};
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return "";
+    }
+  }, []);
+
+  const [sourceFormat, setSourceFormat] = useState<DataFormat>("yaml");
+  const [targetFormat, setTargetFormat] = useState<DataFormat>("json");
+  const [sourceText, setSourceText] = useState<string>(INITIAL_YAML);
+  const [targetText, setTargetText] = useState<string>(initialJson);
+  const [sourceError, setSourceError] = useState<string | null>(null);
+  const [targetError, setTargetError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [statusTone, setStatusTone] = useState<"success" | "error" | null>(null);
+
+  // Helper to trigger client-side downloads for the toolbar actions.
+  const downloadFile = useCallback((filename: string, contents: string) => {
+    const blob = new Blob([contents], { type: "text/plain;charset=utf-8" });
+    const href = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(href);
+  }, []);
+
+  const resetTarget = useCallback(
+    (format: DataFormat) => {
+      setTargetFormat(format);
+      setTargetText("");
+      setTargetError(null);
+    },
+    [setTargetFormat],
+  );
+
+  const validateSource = useCallback(
+    (text: string, format: DataFormat) => {
+      if (!text.trim()) {
+        setSourceError("No content to validate.");
+        return false;
+      }
+
+      try {
+        if (format === "yaml") {
+          yaml.load(text);
+        } else {
+          JSON.parse(text);
+        }
+        setSourceError(null);
+        return true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setSourceError(message);
+        return false;
+      }
+    },
+    [],
+  );
+
+  const validateTarget = useCallback(
+    (text: string, format: DataFormat) => {
+      if (!text.trim()) {
+        setTargetError(null);
+        return true;
+      }
+
+      try {
+        if (format === "yaml") {
+          yaml.load(text);
+        } else {
+          JSON.parse(text);
+        }
+        setTargetError(null);
+        return true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setTargetError(message);
+        return false;
+      }
+    },
+    [],
+  );
+
+  const handleSourceChange = useCallback(
+    (nextValue: string) => {
+      setSourceText(nextValue);
+      setStatusMessage(null);
+      setStatusTone(null);
+      validateSource(nextValue, sourceFormat);
+    },
+    [sourceFormat, validateSource],
+  );
+
+  const handleTargetChange = useCallback(
+    (nextValue: string) => {
+      setTargetText(nextValue);
+      setStatusMessage(null);
+      setStatusTone(null);
+      validateTarget(nextValue, targetFormat);
+    },
+    [targetFormat, validateTarget],
+  );
+
+  const handleManualValidate = useCallback(() => {
+    const sourceValid = validateSource(sourceText, sourceFormat);
+    const targetValid = validateTarget(targetText, targetFormat);
+
+    if (sourceValid && targetValid) {
+      setStatusMessage("Validation succeeded");
+      setStatusTone("success");
+    } else {
+      setStatusMessage("Validation failed – check errors below");
+      setStatusTone("error");
+    }
+  }, [
+    sourceFormat,
+    sourceText,
+    targetFormat,
+    targetText,
+    validateSource,
+    validateTarget,
+  ]);
+
+  const handleManualConvert = useCallback(() => {
+    const sourceValid = validateSource(sourceText, sourceFormat);
+    if (!sourceValid) {
+      setStatusMessage("Resolve source errors before converting.");
+      setStatusTone("error");
+      return;
+    }
+
+    try {
+      if (sourceFormat === "yaml") {
+        const parsed = yaml.load(sourceText) ?? {};
+        const nextJson = JSON.stringify(parsed, null, 2);
+        setTargetFormat("json");
+        setTargetText(nextJson);
+        setTargetError(null);
+        setStatusMessage("Converted YAML to JSON");
+        setStatusTone("success");
+      } else {
+        const parsed = JSON.parse(sourceText);
+        const nextYaml = yaml
+          .dump(parsed, {
+            lineWidth: 80,
+            noRefs: true,
+          })
+          .trimEnd();
+        setTargetFormat("yaml");
+        setTargetText(nextYaml.length ? `${nextYaml}\n` : nextYaml);
+        setTargetError(null);
+        setStatusMessage("Converted JSON to YAML");
+        setStatusTone("success");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setStatusMessage(message);
+      setStatusTone("error");
+    }
+  }, [sourceFormat, sourceText, validateSource]);
+
+  const deduceFormat = useCallback((name: string, contents: string) => {
+    const extension = name.split(".").pop()?.toLowerCase();
+    if (extension === "json") return "json";
+    if (extension === "yaml" || extension === "yml") return "yaml";
+
+    try {
+      JSON.parse(contents);
+      return "json";
+    } catch {
+      try {
+        yaml.load(contents);
+        return "yaml";
+      } catch {
+        return null;
+      }
+    }
+  }, []);
+
+  const handleFileUpload = useCallback(
+    async (file: File) => {
+      try {
+        const text = await file.text();
+        const detectedFormat = deduceFormat(file.name, text);
+
+        if (!detectedFormat) {
+          setStatusMessage("Unsupported file type. Please upload YAML or JSON.");
+          setStatusTone("error");
+          return;
+        }
+
+        if (detectedFormat === "yaml") {
+          const normalized = text.endsWith("\n") ? text : `${text}\n`;
+          try {
+            yaml.load(normalized);
+            setSourceError(null);
+            setStatusMessage(`Loaded YAML file "${file.name}"`);
+            setStatusTone("success");
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            setSourceError(message);
+            setStatusMessage(`YAML parse error: ${message}`);
+            setStatusTone("error");
+          }
+          setSourceFormat("yaml");
+          setSourceText(normalized);
+          resetTarget("json");
+        } else {
+          try {
+            const parsed = JSON.parse(text);
+            const formattedJson = JSON.stringify(parsed, null, 2);
+            setSourceFormat("json");
+            setSourceText(formattedJson);
+            setSourceError(null);
+            resetTarget("yaml");
+            setStatusMessage(`Loaded JSON file "${file.name}"`);
+            setStatusTone("success");
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            setSourceFormat("json");
+            setSourceText(text);
+            setSourceError(message);
+            resetTarget("yaml");
+            setStatusMessage(`JSON parse error: ${message}`);
+            setStatusTone("error");
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatusMessage(`Failed to read file: ${message}`);
+        setStatusTone("error");
+      }
+    },
+    [deduceFormat, resetTarget],
+  );
+
+  const handleDownloadRight = useCallback(() => {
+    if (!targetText.trim()) {
+      setStatusMessage("Nothing to download yet.");
+      setStatusTone("error");
+      return;
+    }
+
+    if (targetError) {
+      setStatusMessage("Resolve target errors before downloading.");
+      setStatusTone("error");
+      return;
+    }
+
+    const filename =
+      targetFormat === "json" ? "document.json" : "document.yaml";
+    downloadFile(filename, targetText);
+    setStatusMessage(`Downloaded ${filename}`);
+    setStatusTone("success");
+  }, [downloadFile, targetError, targetFormat, targetText]);
+
+  const isConvertDisabled = sourceText.trim().length === 0;
+  const isDownloadDisabled =
+    targetError !== null || targetText.trim().length === 0;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+    <div className="flex h-screen min-h-screen flex-col bg-slate-950 text-slate-100">
+      <Toolbar
+        onUploadFile={handleFileUpload}
+        onValidate={handleManualValidate}
+        onConvert={handleManualConvert}
+        onDownloadRight={handleDownloadRight}
+        isConvertDisabled={isConvertDisabled}
+        isDownloadDisabled={isDownloadDisabled}
+        statusMessage={statusMessage}
+        statusTone={statusTone}
+      />
+
+      <main className="flex flex-1 min-h-0 overflow-hidden px-6 pb-6">
+        <SplitPane
+          split="vertical"
+          minSize={200}
+          defaultSize="50%"
+          className="split-pane-container"
+          paneClassName="pane-content"
+          resizerClassName="pane-resizer"
+        >
+          <EditorPane
+            title={sourceFormat === "yaml" ? "YAML" : "JSON"}
+            language={sourceFormat}
+            value={sourceText}
+            onChange={handleSourceChange}
+            error={sourceError}
+          />
+          <JsonPreview
+            title={targetFormat === "yaml" ? "YAML" : "JSON"}
+            language={targetFormat}
+            value={targetText}
+            onChange={handleTargetChange}
+            error={targetError}
+          />
+        </SplitPane>
       </main>
+
+      <footer className="border-t border-slate-800 bg-slate-950 px-6 py-4 text-center text-xs text-slate-400">
+        © 2025 R5W Tech - Interactive Infographics.
+      </footer>
     </div>
   );
 }
