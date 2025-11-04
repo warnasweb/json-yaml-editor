@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+const SITE_URL = "https://json-yaml-editor.vercel.app";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -13,26 +14,22 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://json-yaml-editor.example.com",
-  ),
-  title: {
-    default: "🧩 JSON–YAML Editor",
-    template: "%s · 🧩 JSON–YAML Editor",
+  metadataBase: new URL(SITE_URL),
+  alternates: {
+    canonical: SITE_URL,
   },
+  title: "🧩 JSON–YAML Editor | Next.js + Monaco + TypeScript",
   description:
-    "Interactive JSON⇄YAML converter with validation, Monaco editing, and instant previews.",
+    "Free, open-source web app to edit and convert YAML ↔ JSON in real-time. Built with Next.js, TypeScript, Monaco Editor, and js-yaml.",
   keywords: [
-    "JSON editor",
-    "YAML editor",
-    "JSON to YAML",
-    "YAML to JSON",
+    "yaml editor",
+    "json yaml converter",
+    "online yaml editor",
+    "yaml formatter",
     "monaco editor",
-    "developer tools",
-    "data converter",
-    "R5W Tech",
+    "nextjs tools",
   ],
-  authors: [{ name: "R5W Tech" }],
+  authors: [{ name: "R5W Tech", url: "https://github.com/r5wtech" }],
   creator: "R5W Tech",
   publisher: "R5W Tech",
   robots: {
@@ -40,29 +37,54 @@ export const metadata: Metadata = {
     follow: true,
   },
   openGraph: {
-    title: "🧩 JSON–YAML Editor",
-    description:
-      "Convert and validate JSON and YAML side by side with an interactive Monaco-powered interface.",
-    url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://json-yaml-editor.example.com",
+    title: "JSON–YAML Editor",
+    description: "Edit and convert YAML ↔ JSON online in real-time.",
+    url: SITE_URL,
     siteName: "JSON–YAML Editor",
-    locale: "en_US",
-    type: "website",
     images: [
       {
-        url: "/og-image.png",
+        url: `${SITE_URL}/og-image.png`,
         width: 1200,
         height: 630,
-        alt: "JSON–YAML Editor by R5W Tech",
+        alt: "JSON–YAML Editor preview",
       },
     ],
+    locale: "en_US",
+    type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "🧩 JSON–YAML Editor",
-    description:
-      "Convert and validate JSON and YAML with an interactive split-view editor.",
-    creator: "@r5wtech",
-    images: ["/og-image.png"],
+    title: "JSON–YAML Editor",
+    description: "Online YAML ↔ JSON live editor built with Next.js + Monaco.",
+    images: [`${SITE_URL}/og-image.png`],
+  },
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
+  },
+  manifest: "/site.webmanifest",
+};
+
+const jsonLdSoftwareApplication = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "JSON–YAML Editor",
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "Any",
+  description:
+    "Free, open-source web app to edit and convert YAML ↔ JSON in real-time.",
+  url: SITE_URL,
+  image: `${SITE_URL}/og-image.png`,
+  author: {
+    "@type": "Organization",
+    name: "R5W Tech",
+    url: "https://github.com/r5wtech",
+  },
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
   },
 };
 
@@ -73,6 +95,23 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              name: "JSON–YAML Editor",
+              applicationCategory: "DeveloperApplication",
+              operatingSystem: "Web",
+              description:
+                "Edit and convert YAML ↔ JSON online using Next.js and Monaco Editor.",
+              url: SITE_URL,
+            }),
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
